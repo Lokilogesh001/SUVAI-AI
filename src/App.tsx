@@ -2,7 +2,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { LanguageProvider } from "./contexts/LanguageContext";
 import { AuthProvider } from "./contexts/AuthContext";
 import ProtectedRoute from "./components/ProtectedRoute";
@@ -12,7 +12,6 @@ import RecipeCategoryPage from "./pages/RecipeCategoryPage";
 import ProfilePage from "./pages/ProfilePage";
 import MealPlannerPage from "./pages/MealPlannerPage";
 import GroceryPage from "./pages/GroceryPage";
-import ChatbotPage from "./pages/ChatbotPage";
 import OnboardingPage from "./pages/OnboardingPage";
 import AuthPage from "./pages/AuthPage";
 import NotFound from "./pages/NotFound";
@@ -44,7 +43,7 @@ const App = () => (
               <Route path="/recipe/:id" element={<RecipePage />} />
               <Route path="/meal-planner" element={<MealPlannerPage />} />
               <Route path="/grocery" element={<GroceryPage />} />
-              <Route path="/assistant" element={<ChatbotPage />} />
+              <Route path="/assistant" element={<Navigate to="/" replace />} />
 
               {/* Authentication entry */}
               <Route element={<ProtectedRoute requireAuth={false} />}>

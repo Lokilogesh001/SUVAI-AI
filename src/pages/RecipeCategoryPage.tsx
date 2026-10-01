@@ -18,7 +18,8 @@ import { Recipe } from "@/types/recipe";
 
 const CUISINES = [
   "all", "Indian", "Italian", "Mexican", "Thai", "Japanese", 
-  "Mediterranean", "Chinese", "French", "American"
+  "Chinese", "Mediterranean", "Spanish", "Turkish", "French", 
+  "British", "American", "Middle Eastern", "Vietnamese", "Greek", "Asian"
 ];
 
 const DIETS = [

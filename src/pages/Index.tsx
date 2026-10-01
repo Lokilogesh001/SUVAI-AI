@@ -78,17 +78,17 @@ const Index = () => {
           limit: 6,
         });
 
-        // 3. Quick meals (under 30 minutes)
-        const allRecipes = recipeService.getAllSeedRecipes();
-        const quick = allRecipes.filter((r) => r.readyInMinutes <= 25).slice(0, 4);
+        // 3. Quick meals (under 30 minutes) from Supabase catalog
+        const allRecipes = await recipeService.getAllRecipes(50);
+        const quick = allRecipes.filter((r) => r.readyInMinutes <= 30).slice(0, 4);
 
         // 4. Discovery / Trending (diversified recipes)
         const trend = allRecipes.filter((r) => !recs.some((rc) => rc.id === r.id)).slice(0, 4);
 
         if (mounted) {
           setRecommendations(recs);
-          setQuickMeals(quick);
-          setTrending(trend.length > 0 ? trend : allRecipes.slice(0, 4));
+          setQuickMeals(quick.length > 0 ? quick : allRecipes.slice(0, 4));
+          setTrending(trend.length > 0 ? trend : allRecipes.slice(4, 8));
         }
       } catch (err) {
         console.error("Error loading homepage discovery:", err);
@@ -422,7 +422,6 @@ const Index = () => {
             <Link to="/recipes" className="hover:text-foreground">Recipes</Link>
             <Link to="/meal-planner" className="hover:text-foreground">Meal Planner</Link>
             <Link to="/grocery" className="hover:text-foreground">Grocery</Link>
-            <Link to="/assistant" className="hover:text-foreground">Assistant</Link>
           </div>
 
           <div className="text-xs">

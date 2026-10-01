@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { Clock, Flame, Heart, Sparkles } from "lucide-react";
+import { Clock, Flame, Heart, Sparkles, ThumbsUp, ThumbsDown } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { RecommendationReason } from "@/types/recipe";
 import { useAuth } from "@/contexts/AuthContext";
@@ -38,6 +38,30 @@ const RecipeCard = ({
   const navigate = useNavigate();
   const [isSaved, setIsSaved] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [feedback, setFeedback] = useState<"like" | "dislike" | null>(null);
+
+  const handleFeedback = async (e: React.MouseEvent, type: "like" | "dislike") => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    if (!user) {
+      toast.info("Sign in to record recipe feedback", {
+        action: {
+          label: "Sign In",
+          onClick: () => navigate("/auth"),
+        },
+      });
+      return;
+    }
+
+    const nextType = feedback === type ? null : type;
+    setFeedback(nextType);
+
+    if (nextType) {
+      await userDataService.recordInteraction(user.id, id, nextType);
+      toast.success(nextType === "like" ? "Recipe marked as liked" : "Recipe marked as disliked");
+    }
+  };
 
   useEffect(() => {
     let mounted = true;
@@ -165,12 +189,38 @@ const RecipeCard = ({
             )}
           </div>
 
-          <Link
-            to={`/recipe/${id}`}
-            className="text-xs font-semibold text-primary hover:underline flex items-center gap-1"
-          >
-            Cook &rarr;
-          </Link>
+          <div className="flex items-center gap-2">
+            {/* Feedback Buttons */}
+            <button
+              type="button"
+              onClick={(e) => handleFeedback(e, "like")}
+              className={`p-1 rounded hover:bg-muted transition-colors ${
+                feedback === "like" ? "text-primary" : "text-muted-foreground"
+              }`}
+              title="Like recipe"
+              aria-label="Like recipe"
+            >
+              <ThumbsUp className={`h-3.5 w-3.5 ${feedback === "like" ? "fill-primary" : ""}`} />
+            </button>
+            <button
+              type="button"
+              onClick={(e) => handleFeedback(e, "dislike")}
+              className={`p-1 rounded hover:bg-muted transition-colors ${
+                feedback === "dislike" ? "text-destructive" : "text-muted-foreground"
+              }`}
+              title="Dislike recipe"
+              aria-label="Dislike recipe"
+            >
+              <ThumbsDown className={`h-3.5 w-3.5 ${feedback === "dislike" ? "fill-destructive" : ""}`} />
+            </button>
+
+            <Link
+              to={`/recipe/${id}`}
+              className="text-xs font-semibold text-primary hover:underline flex items-center gap-1 ml-1"
+            >
+              Cook &rarr;
+            </Link>
+          </div>
         </div>
       </div>
     </div>

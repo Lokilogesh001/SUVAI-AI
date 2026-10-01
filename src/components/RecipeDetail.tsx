@@ -413,7 +413,7 @@ const RecipeDetail = ({ recipe }: RecipeDetailProps) => {
                 Chef Advice
               </span>
               <p className="text-xs text-muted-foreground leading-relaxed">
-                Need ingredient replacements? Open our <Link to="/assistant" className="text-primary font-semibold hover:underline">Recipe Assistant</Link> to ask for live substitutions and cooking adaptations.
+                Need ingredient replacements? Ask our floating <span className="text-primary font-semibold">suvAI BOT</span> for instant substitutions, technique tips, and cooking adaptations.
               </p>
             </div>
           </div>

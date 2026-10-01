@@ -122,50 +122,67 @@ class RecipeServiceImpl implements IRecipeProvider {
     const cached = getCached<Recipe[]>(cacheKey);
     if (cached) return cached;
 
-    // If Spoonacular key is provided, try external query
-    if (SPOONACULAR_KEY && !SPOONACULAR_KEY.includes("your-spoonacular")) {
+    // 1. Query Supabase real database as the primary source of truth
+    if (isSupabaseConfigured) {
       try {
-        const queryParams = new URLSearchParams({
-          apiKey: SPOONACULAR_KEY,
-          number: String(params.number || 12),
-          offset: String(params.offset || 0),
-          addRecipeInformation: "true",
-          fillIngredients: "true",
-        });
+        let query = supabase.from("recipes").select("*");
 
-        if (params.query) queryParams.append("query", params.query);
-        if (params.cuisine && params.cuisine !== "all") queryParams.append("cuisine", params.cuisine);
-        if (params.diet && params.diet !== "all") queryParams.append("diet", params.diet);
-        if (params.maxReadyTime) queryParams.append("maxReadyTime", String(params.maxReadyTime));
-        if (params.includeIngredients?.length) {
-          queryParams.append("includeIngredients", params.includeIngredients.join(","));
-        }
-        if (params.excludeIngredients?.length) {
-          queryParams.append("excludeIngredients", params.excludeIngredients.join(","));
+        if (params.query && params.query.trim()) {
+          const q = params.query.trim();
+          query = query.ilike("title", `%${q}%`);
         }
 
-        const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 6000);
+        if (params.cuisine && params.cuisine.toLowerCase() !== "all") {
+          query = query.ilike("cuisine", `%${params.cuisine}%`);
+        }
 
-        const res = await fetch(`${SPOONACULAR_BASE_URL}/recipes/complexSearch?${queryParams}`, {
-          signal: controller.signal,
-        });
-        clearTimeout(timeout);
-
-        if (res.ok) {
-          const data = await res.json();
-          if (Array.isArray(data.results) && data.results.length > 0) {
-            const normalized = data.results.map(normalizeSpoonacularRecipe);
-            setCached(cacheKey, normalized);
-            return normalized;
+        if (params.diet && params.diet.toLowerCase() !== "all") {
+          const d = params.diet.toLowerCase();
+          if (d === "vegetarian") {
+            query = query.in("diet", ["vegetarian", "vegan"]);
+          } else {
+            query = query.eq("diet", d);
           }
         }
+
+        if (params.maxReadyTime) {
+          query = query.lte("ready_minutes", params.maxReadyTime);
+        }
+
+        query = query.order("title", { ascending: true }).limit(params.number || 24);
+
+        const { data, error } = await query;
+        if (!error && data && data.length > 0) {
+          let normalized = data.map(normalizeSupabaseRecipe);
+
+          // In-memory filter for include/exclude ingredients if specified
+          if (params.includeIngredients?.length) {
+            const queryIngs = params.includeIngredients.map((i) => i.toLowerCase().trim());
+            normalized = normalized.filter((r) =>
+              queryIngs.some((qi) =>
+                r.ingredients.some((ing) => ing.name.toLowerCase().includes(qi))
+              )
+            );
+          }
+
+          if (params.excludeIngredients?.length) {
+            const excludeIngs = params.excludeIngredients.map((i) => i.toLowerCase().trim());
+            normalized = normalized.filter((r) =>
+              !excludeIngs.some((xi) =>
+                r.ingredients.some((ing) => ing.name.toLowerCase().includes(xi))
+              )
+            );
+          }
+
+          setCached(cacheKey, normalized);
+          return normalized;
+        }
       } catch (err) {
-        console.warn("Spoonacular search unavailable, falling back to local catalog:", err);
+        console.warn("Supabase search query failed:", err);
       }
     }
 
-    // High quality local catalog filtering
+    // 2. High quality local catalog filtering fallback
     let results = [...CURATED_GLOBAL_RECIPES];
 
     if (params.query) {
@@ -240,26 +257,6 @@ class RecipeServiceImpl implements IRecipeProvider {
       return seedMatch;
     }
 
-    // Otherwise check Spoonacular if numeric ID
-    if (SPOONACULAR_KEY && !isNaN(Number(id))) {
-      try {
-        const queryParams = new URLSearchParams({
-          apiKey: SPOONACULAR_KEY,
-          includeNutrition: "true",
-        });
-
-        const res = await fetch(`${SPOONACULAR_BASE_URL}/recipes/${id}/information?${queryParams}`);
-        if (res.ok) {
-          const raw = await res.json();
-          const normalized = normalizeSpoonacularRecipe(raw);
-          setCached(cacheKey, normalized);
-          return normalized;
-        }
-      } catch (err) {
-        console.warn(`Error fetching recipe ${id} from Spoonacular:`, err);
-      }
-    }
-
     // Default fallback to first recipe if missing
     return CURATED_GLOBAL_RECIPES[0];
   }
@@ -269,25 +266,21 @@ class RecipeServiceImpl implements IRecipeProvider {
     const cached = getCached<Recipe[]>(cacheKey);
     if (cached) return cached;
 
-    if (SPOONACULAR_KEY && !SPOONACULAR_KEY.includes("your-spoonacular")) {
+    if (isSupabaseConfigured) {
       try {
-        const queryParams = new URLSearchParams({
-          apiKey: SPOONACULAR_KEY,
-          number: String(count),
-        });
-        if (tags) queryParams.append("tags", tags);
+        const { data, error } = await supabase
+          .from("recipes")
+          .select("*")
+          .limit(80);
 
-        const res = await fetch(`${SPOONACULAR_BASE_URL}/recipes/random?${queryParams}`);
-        if (res.ok) {
-          const data = await res.json();
-          if (Array.isArray(data.recipes) && data.recipes.length > 0) {
-            const normalized = data.recipes.map(normalizeSpoonacularRecipe);
-            setCached(cacheKey, normalized);
-            return normalized;
-          }
+        if (!error && data && data.length > 0) {
+          const all = data.map(normalizeSupabaseRecipe);
+          const shuffled = all.sort(() => 0.5 - Math.random()).slice(0, count);
+          setCached(cacheKey, shuffled);
+          return shuffled;
         }
       } catch (err) {
-        console.warn("Random query failed from Spoonacular, using curated catalog:", err);
+        console.warn("Supabase random recipes query failed:", err);
       }
     }
 
@@ -295,6 +288,24 @@ class RecipeServiceImpl implements IRecipeProvider {
     const subset = shuffled.slice(0, count);
     setCached(cacheKey, subset);
     return subset;
+  }
+
+  async getAllRecipes(limit: number = 100): Promise<Recipe[]> {
+    if (isSupabaseConfigured) {
+      try {
+        const { data, error } = await supabase
+          .from("recipes")
+          .select("*")
+          .limit(limit);
+
+        if (!error && data && data.length > 0) {
+          return data.map(normalizeSupabaseRecipe);
+        }
+      } catch (err) {
+        console.warn("Supabase getAllRecipes query failed:", err);
+      }
+    }
+    return [...CURATED_GLOBAL_RECIPES];
   }
 
   getAllSeedRecipes(): Recipe[] {

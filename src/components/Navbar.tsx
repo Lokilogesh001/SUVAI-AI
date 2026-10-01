@@ -49,7 +49,6 @@ const Navbar = () => {
     { to: "/recipes", label: "Recipes", icon: BookOpen },
     { to: "/meal-planner", label: "Meal Planner", icon: Calendar },
     { to: "/grocery", label: "Grocery", icon: ShoppingCart },
-    { to: "/assistant", label: "Assistant", icon: Sparkles },
   ];
 
   return (
