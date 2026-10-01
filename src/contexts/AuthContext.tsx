@@ -12,7 +12,7 @@ interface AuthContextProps {
   isLoading: boolean;
   signIn: (email: string, password: string, redirectPath?: string) => Promise<boolean>;
   signUp: (params: SignUpParams) => Promise<boolean>;
-  signInWithGoogle: () => Promise<void>;
+  signInWithGoogle: (redirectPath?: string) => Promise<void>;
   resetPassword: (email: string) => Promise<boolean>;
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
@@ -181,15 +181,27 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const signInWithGoogle = async () => {
+  const signInWithGoogle = async (redirectPath?: string) => {
     try {
       setIsLoading(true);
-      await authService.signInWithGoogle();
+      await authService.signInWithGoogle(redirectPath);
     } catch (error: any) {
-      console.error("Google auth error:", error);
-      toast.error("Google sign in failed", {
-        description: error.message || "Could not authenticate with Google",
-      });
+      console.error("Google OAuth error:", error);
+      const msg = error?.message || "";
+      const isProviderDisabled =
+        msg.toLowerCase().includes("not enabled") ||
+        msg.toLowerCase().includes("unsupported provider");
+
+      if (isProviderDisabled) {
+        toast.error("Google sign-in is temporarily unavailable.", {
+          description: "Please try email/password or contact the administrator.",
+          duration: 6000,
+        });
+      } else {
+        toast.error("Google sign in failed", {
+          description: msg || "Could not authenticate with Google",
+        });
+      }
     } finally {
       setIsLoading(false);
     }

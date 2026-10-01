@@ -146,3 +146,17 @@
     @apply grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6;
   }
 }
+
+/* Route-aware chatbot suppression for /auth and /auth/* */
+.hide-chatbot [id*="gptbots" i],
+.hide-chatbot [class*="gptbots" i],
+.hide-chatbot iframe[src*="gptbots" i],
+.hide-chatbot #gptbots-bubble,
+.hide-chatbot #gptbots-window,
+.hide-chatbot div[data-gptbots] {
+  display: none !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+  opacity: 0 !important;
+}
+

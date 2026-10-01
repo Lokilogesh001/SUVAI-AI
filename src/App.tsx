@@ -14,7 +14,9 @@ import MealPlannerPage from "./pages/MealPlannerPage";
 import GroceryPage from "./pages/GroceryPage";
 import OnboardingPage from "./pages/OnboardingPage";
 import AuthPage from "./pages/AuthPage";
+import AuthCallbackPage from "./pages/AuthCallbackPage";
 import NotFound from "./pages/NotFound";
+import ChatbotVisibilityGuard from "./components/ChatbotVisibilityGuard";
 
 import SupabaseConnectionError from "./components/SupabaseConnectionError";
 
@@ -34,6 +36,7 @@ const App = () => (
       <Toaster />
       <Sonner position="top-right" richColors />
       <BrowserRouter>
+        <ChatbotVisibilityGuard />
         <LanguageProvider>
           <AuthProvider>
             <Routes>
@@ -45,7 +48,8 @@ const App = () => (
               <Route path="/grocery" element={<GroceryPage />} />
               <Route path="/assistant" element={<Navigate to="/" replace />} />
 
-              {/* Authentication entry */}
+              {/* Authentication routes */}
+              <Route path="/auth/callback" element={<AuthCallbackPage />} />
               <Route element={<ProtectedRoute requireAuth={false} />}>
                 <Route path="/auth" element={<AuthPage />} />
               </Route>

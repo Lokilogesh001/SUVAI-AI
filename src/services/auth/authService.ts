@@ -119,13 +119,17 @@ export const authService = {
   /**
    * Real Supabase Google OAuth
    */
-  async signInWithGoogle(): Promise<void> {
+  async signInWithGoogle(redirectPath?: string): Promise<void> {
     assertSupabaseReady();
+
+    const redirectUrl = redirectPath 
+      ? `${window.location.origin}/auth/callback?redirect=${encodeURIComponent(redirectPath)}`
+      : `${window.location.origin}/auth/callback`;
 
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "google",
       options: {
-        redirectTo: `${window.location.origin}/auth`,
+        redirectTo: redirectUrl,
       },
     });
 
