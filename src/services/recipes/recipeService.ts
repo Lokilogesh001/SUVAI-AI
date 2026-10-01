@@ -1,9 +1,38 @@
 import { Recipe, RecipeSearchParams } from "@/types/recipe";
 import { IRecipeProvider, getCached, setCached } from "./recipeProvider";
 import { CURATED_GLOBAL_RECIPES } from "./seedRecipes";
+import { supabase, isSupabaseConfigured } from "@/lib/supabase";
 
 const SPOONACULAR_BASE_URL = "https://api.spoonacular.com";
 const SPOONACULAR_KEY = import.meta.env.VITE_SPOONACULAR_API_KEY || "";
+
+function normalizeSupabaseRecipe(row: any): Recipe {
+  return {
+    id: String(row.id),
+    external_id: String(row.external_id || row.id),
+    title: row.title || "Delicious Recipe",
+    description: row.description || "",
+    image: row.image_url || "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?ixlib=rb-4.0.3&auto=format&fit=crop&w=1200&q=80",
+    cuisine: row.cuisine || "general",
+    diet: row.diet || "all",
+    dishTypes: Array.isArray(row.dish_types) ? row.dish_types : ["main course"],
+    readyInMinutes: row.ready_minutes || 30,
+    servings: row.servings || 4,
+    calories: row.calories || 400,
+    nutrition: {
+      calories: row.calories || 400,
+      protein: Number(row.protein) || 20,
+      carbs: Number(row.carbs) || 30,
+      fat: Number(row.fat) || 15,
+      fiber: 4,
+      sugar: 3,
+    },
+    ingredients: Array.isArray(row.ingredients) ? row.ingredients : [],
+    instructions: Array.isArray(row.instructions) ? row.instructions : [],
+    tags: [...(row.dish_types || []), row.cuisine].filter(Boolean),
+    spoonacularScore: 90,
+  };
+}
 
 function normalizeSpoonacularRecipe(raw: any): Recipe {
   const calories = raw.nutrition?.nutrients?.find((n: any) => n.name === "Calories")?.amount 
@@ -185,7 +214,26 @@ class RecipeServiceImpl implements IRecipeProvider {
     const cached = getCached<Recipe>(cacheKey);
     if (cached) return cached;
 
-    // Check seed catalog first
+    // Check Supabase recipes catalog first
+    if (isSupabaseConfigured) {
+      try {
+        const { data, error } = await supabase
+          .from("recipes")
+          .select("*")
+          .eq("id", id)
+          .maybeSingle();
+
+        if (!error && data) {
+          const normalized = normalizeSupabaseRecipe(data);
+          setCached(cacheKey, normalized);
+          return normalized;
+        }
+      } catch (err) {
+        console.warn(`Could not fetch recipe ${id} from Supabase:`, err);
+      }
+    }
+
+    // Check curated catalog
     const seedMatch = CURATED_GLOBAL_RECIPES.find((r) => r.id === id);
     if (seedMatch) {
       setCached(cacheKey, seedMatch);

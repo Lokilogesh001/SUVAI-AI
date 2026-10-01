@@ -52,7 +52,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (fetchedPrefs) {
         setPreferences(fetchedPrefs);
       } else {
-        // Default preferences
+        // Default initial preference schema for new user
         setPreferences({
           user_id: currentUserId,
           diet: "all",
@@ -66,23 +66,28 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         });
       }
     } catch (err) {
-      console.error("Error loading user profile or preferences:", err);
+      console.error("Error loading user profile or preferences from Supabase:", err);
     }
   }, []);
 
-  // Initialize session
+  // Initialize and restore active Supabase session
   useEffect(() => {
     let mounted = true;
 
     const initialize = async () => {
       try {
+        if (!isSupabaseConfigured) {
+          setIsLoading(false);
+          return;
+        }
+
         const initialUser = await authService.getInitialSession();
         if (mounted && initialUser) {
           setUser(initialUser);
           await loadUserData(initialUser.id, initialUser);
         }
       } catch (err) {
-        console.error("Session initialization error:", err);
+        console.error("Session restoration error:", err);
       } finally {
         if (mounted) {
           setIsLoading(false);
@@ -92,7 +97,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     initialize();
 
-    // Listen to Supabase Auth state changes if live Supabase is configured
+    // Listen to Supabase Auth state changes
     if (isSupabaseConfigured) {
       const { data: { subscription } } = supabase.auth.onAuthStateChange(
         async (_event, session) => {
@@ -102,7 +107,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             const authUser: AuthUserData = {
               id: session.user.id,
               email: session.user.email || "",
-              name: session.user.user_metadata?.name || session.user.user_metadata?.full_name || session.user.email?.split("@")[0] || "Chef",
+              name:
+                session.user.user_metadata?.name ||
+                session.user.user_metadata?.full_name ||
+                session.user.email?.split("@")[0] ||
+                "Chef",
               country: session.user.user_metadata?.country || "US",
               avatar_url: session.user.user_metadata?.avatar_url,
             };
@@ -157,9 +166,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setUser(authUser);
       await loadUserData(authUser.id, authUser);
       toast.success("Account created successfully!", {
-        description: "Let's personalize your cooking experience.",
+        description: "Let's personalize your culinary experience.",
       });
-      // Redirect new signups directly into the Onboarding flow
       navigate("/onboarding");
       return true;
     } catch (error: any) {
@@ -177,13 +185,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       setIsLoading(true);
       await authService.signInWithGoogle();
-      if (!isSupabaseConfigured) {
-        const initialUser = await authService.getInitialSession();
-        setUser(initialUser);
-        if (initialUser) await loadUserData(initialUser.id, initialUser);
-        toast.success("Signed in with Google (Demo mode)");
-        navigate("/");
-      }
     } catch (error: any) {
       console.error("Google auth error:", error);
       toast.error("Google sign in failed", {
@@ -242,8 +243,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       };
       await authService.saveUserPreferences(merged);
       setPreferences(merged);
-      toast.success("Preferences saved", {
-        description: "Your recommendations will now reflect these preferences.",
+      toast.success("Preferences updated", {
+        description: "Recommendations have been refreshed based on your new preferences.",
       });
       return true;
     } catch (err: any) {
