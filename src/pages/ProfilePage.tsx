@@ -1,348 +1,570 @@
-import { useState } from "react";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Button } from "@/components/ui/button";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { Plus, Trash2, ClipboardList, Heart, ShoppingCart, User, Check, LogOut } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
-import { Separator } from "@/components/ui/separator";
+import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
-import { toast } from "sonner";
-import { useLanguage } from "@/contexts/LanguageContext";
+import { 
+  User, 
+  Heart, 
+  Settings, 
+  Calendar, 
+  LogOut, 
+  Save, 
+  ChefHat, 
+  Clock, 
+  Flame, 
+  Trash2, 
+  History, 
+  Sliders, 
+  Globe 
+} from "lucide-react";
+import Navbar from "@/components/Navbar";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { 
+  Select, 
+  SelectContent, 
+  SelectItem, 
+  SelectTrigger, 
+  SelectValue 
+} from "@/components/ui/select";
 import { useAuth } from "@/contexts/AuthContext";
+import { useLanguage } from "@/contexts/LanguageContext";
+import { userDataService } from "@/services/userDataService";
+import { recipeService } from "@/services/recipes/recipeService";
+import { Recipe } from "@/types/recipe";
+import { DietType, CookingSkill, CookingTimePreference, SpicePreference } from "@/types/database";
+import { toast } from "sonner";
 
-const SAVED_RECIPES = [
-  {
-    id: "1",
-    title: "Pan-Seared Salmon with Lemon Butter",
-    image: "https://images.unsplash.com/photo-1519708227418-c8fd9a32b7a2?ixlib=rb-4.0.3&q=85&fm=jpg&crop=entropy&cs=srgb&w=1200",
-    tags: ["Seafood", "Keto", "High Protein"],
-  },
-  {
-    id: "3",
-    title: "Classic Tiramisu",
-    image: "https://images.unsplash.com/photo-1571877227200-a0d98ea607e9?ixlib=rb-4.0.3&q=85&fm=jpg&crop=entropy&cs=srgb&w=1200",
-    tags: ["Dessert", "Italian", "No-Bake"],
-  },
-  {
-    id: "8",
-    title: "Mushroom Risotto",
-    image: "https://images.unsplash.com/photo-1476124369491-e7addf5db371?ixlib=rb-4.0.3&q=85&fm=jpg&crop=entropy&cs=srgb&w=1200",
-    tags: ["Italian", "Vegetarian", "Comfort Food"],
-  },
+const ALL_CUISINES = [
+  "Indian", "Italian", "Mexican", "Thai", "Japanese", 
+  "Mediterranean", "Chinese", "French", "American", "Middle Eastern"
 ];
 
-interface GroceryItem {
-  id: string;
-  name: string;
-  quantity: string;
-  checked: boolean;
-  category: string;
-}
+const COMMON_ALLERGIES = [
+  "Peanuts", "Tree Nuts", "Dairy", "Gluten / Wheat", 
+  "Shellfish", "Fish", "Eggs", "Soy"
+];
 
-const INITIAL_GROCERY_ITEMS: GroceryItem[] = [
-  { id: "1", name: "Salmon fillet", quantity: "2 pieces", checked: false, category: "Seafood" },
-  { id: "2", name: "Lemons", quantity: "3", checked: false, category: "Produce" },
-  { id: "3", name: "Unsalted butter", quantity: "100g", checked: true, category: "Dairy" },
-  { id: "4", name: "Fresh dill", quantity: "1 bunch", checked: false, category: "Produce" },
-  { id: "5", name: "Garlic", quantity: "4 cloves", checked: false, category: "Produce" },
-  { id: "6", name: "Olive oil", quantity: "2 tbsp", checked: true, category: "Pantry" },
-  { id: "7", name: "Salt", quantity: "to taste", checked: true, category: "Pantry" },
-  { id: "8", name: "Black pepper", quantity: "to taste", checked: true, category: "Pantry" },
+const DISLIKED_OPTIONS = [
+  "Cilantro", "Mushrooms", "Olives", "Eggplant", "Bell Peppers", "Onions", "Pork", "Beef"
+];
+
+const COUNTRIES = [
+  { code: "IN", name: "India" },
+  { code: "US", name: "United States" },
+  { code: "IT", name: "Italy" },
+  { code: "MX", name: "Mexico" },
+  { code: "JP", name: "Japan" },
+  { code: "TH", name: "Thailand" },
+  { code: "FR", name: "France" },
+  { code: "GB", name: "United Kingdom" },
+  { code: "CA", name: "Canada" },
+  { code: "AU", name: "Australia" },
 ];
 
 const ProfilePage = () => {
   const { t } = useLanguage();
-  const { user, signOut } = useAuth();
-  const [activeTab, setActiveTab] = useState("saved");
-  const [groceryItems, setGroceryItems] = useState<GroceryItem[]>(INITIAL_GROCERY_ITEMS);
-  const [newItemName, setNewItemName] = useState("");
-  const [newItemQuantity, setNewItemQuantity] = useState("");
-  const [newItemCategory, setNewItemCategory] = useState("Produce");
+  const { user, profile, preferences, updateProfile, updatePreferences, signOut } = useAuth();
 
-  const handleAddItem = () => {
-    if (!newItemName.trim()) return;
-    
-    const newItem: GroceryItem = {
-      id: Date.now().toString(),
-      name: newItemName.trim(),
-      quantity: newItemQuantity.trim() || "1",
-      checked: false,
-      category: newItemCategory,
+  const [activeTab, setActiveTab] = useState("preferences");
+  const [savedRecipes, setSavedRecipes] = useState<Recipe[]>([]);
+  const [cookedRecipes, setCookedRecipes] = useState<Recipe[]>([]);
+  const [isLoadingData, setIsLoadingData] = useState(true);
+
+  // Form states for profile & preferences
+  const [name, setName] = useState(profile?.name || user?.name || "");
+  const [country, setCountry] = useState(profile?.country || user?.country || "IN");
+  const [diet, setDiet] = useState<DietType>(preferences?.diet || "all");
+  const [favoriteCuisines, setFavoriteCuisines] = useState<string[]>(preferences?.favorite_cuisines || []);
+  const [allergies, setAllergies] = useState<string[]>(preferences?.allergies || []);
+  const [dislikedIngredients, setDislikedIngredients] = useState<string[]>(preferences?.disliked_ingredients || []);
+  const [cookingTime, setCookingTime] = useState<CookingTimePreference>(preferences?.preferred_cooking_time || "30-60");
+  const [cookingSkill, setCookingSkill] = useState<CookingSkill>(preferences?.cooking_skill || "intermediate");
+  const [spicePreference, setSpicePreference] = useState<SpicePreference>(preferences?.spice_preference || "medium");
+
+  // Keep state synced when user context finishes loading
+  useEffect(() => {
+    if (profile) {
+      setName(profile.name);
+      setCountry(profile.country);
+    }
+    if (preferences) {
+      setDiet(preferences.diet);
+      setFavoriteCuisines(preferences.favorite_cuisines);
+      setAllergies(preferences.allergies);
+      setDislikedIngredients(preferences.disliked_ingredients);
+      setCookingTime(preferences.preferred_cooking_time);
+      setCookingSkill(preferences.cooking_skill);
+      setSpicePreference(preferences.spice_preference);
+    }
+  }, [profile, preferences]);
+
+  // Load saved recipes and cooking history from userDataService + recipeService
+  useEffect(() => {
+    let isMounted = true;
+    const loadUserData = async () => {
+      if (!user) return;
+      setIsLoadingData(true);
+      try {
+        const [savedIds, interactions] = await Promise.all([
+          userDataService.getSavedRecipeIds(user.id),
+          userDataService.getInteractions(user.id),
+        ]);
+
+        // Fetch recipe entities
+        const recipePromises = savedIds.map((id) => recipeService.getRecipeById(id));
+        const resolvedSaved = (await Promise.all(recipePromises)).filter(Boolean) as Recipe[];
+
+        // Extract cooked recipe IDs
+        const cookedIds = Array.from(
+          new Set(
+            interactions
+              .filter((i) => i.interaction_type === "cook")
+              .map((i) => i.recipe_id)
+          )
+        );
+        const resolvedCooked = (await Promise.all(cookedIds.map((id) => recipeService.getRecipeById(id)))).filter(Boolean) as Recipe[];
+
+        if (isMounted) {
+          setSavedRecipes(resolvedSaved);
+          setCookedRecipes(resolvedCooked);
+        }
+      } catch (err) {
+        console.error("Error loading profile user data:", err);
+      } finally {
+        if (isMounted) setIsLoadingData(false);
+      }
     };
-    
-    setGroceryItems([...groceryItems, newItem]);
-    setNewItemName("");
-    setNewItemQuantity("");
-    toast.success("Item added to grocery list");
-  };
 
-  const handleToggleCheck = (id: string) => {
-    setGroceryItems(
-      groceryItems.map((item) =>
-        item.id === id ? { ...item, checked: !item.checked } : item
-      )
+    loadUserData();
+    return () => {
+      isMounted = false;
+    };
+  }, [user]);
+
+  const handleToggleCuisine = (item: string) => {
+    setFavoriteCuisines((prev) => 
+      prev.includes(item) ? prev.filter((c) => c !== item) : [...prev, item]
     );
   };
 
-  const handleDeleteItem = (id: string) => {
-    setGroceryItems(groceryItems.filter((item) => item.id !== id));
-    toast.success("Item removed from grocery list");
+  const handleToggleAllergy = (item: string) => {
+    setAllergies((prev) => 
+      prev.includes(item) ? prev.filter((a) => a !== item) : [...prev, item]
+    );
   };
 
-  const clearCheckedItems = () => {
-    setGroceryItems(groceryItems.filter((item) => !item.checked));
-    toast.success("Checked items cleared");
+  const handleToggleDislike = (item: string) => {
+    setDislikedIngredients((prev) => 
+      prev.includes(item) ? prev.filter((d) => d !== item) : [...prev, item]
+    );
   };
 
-  const groupedItems = groceryItems.reduce((acc, item) => {
-    if (!acc[item.category]) {
-      acc[item.category] = [];
-    }
-    acc[item.category].push(item);
-    return acc;
-  }, {} as Record<string, GroceryItem[]>);
+  const handleSavePreferences = async () => {
+    await updateProfile({ name, country });
+    await updatePreferences({
+      diet,
+      favorite_cuisines: favoriteCuisines,
+      allergies,
+      disliked_ingredients: dislikedIngredients,
+      preferred_cooking_time: cookingTime,
+      cooking_skill: cookingSkill,
+      spice_preference: spicePreference,
+    });
+  };
+
+  const handleUnsaveRecipe = async (recipeId: string) => {
+    if (!user) return;
+    await userDataService.unsaveRecipe(user.id, recipeId);
+    setSavedRecipes((prev) => prev.filter((r) => r.id !== recipeId));
+    toast.success("Recipe removed from saved collection");
+  };
 
   return (
-    <div className="pt-16 min-h-screen">
-      <div className="content-grid section-padding">
-        <div className="flex flex-col md:flex-row gap-8">
-          <div className="w-full md:w-64 shrink-0">
-            <div className="sticky top-24">
-              <div className="flex flex-col items-center p-6 bg-muted/30 rounded-lg mb-4">
-                <div className="h-20 w-20 bg-primary/10 rounded-full flex items-center justify-center mb-3">
-                  <User className="h-10 w-10 text-primary" />
-                </div>
-                <h2 className="text-xl font-semibold">{user?.email || "Guest User"}</h2>
-                <p className="text-muted-foreground mb-4">{user?.email || "guest@example.com"}</p>
-                <Button className="w-full" variant="outline" size="sm">
-                  Edit Profile
-                </Button>
-              </div>
-              
-              <div className="bg-muted/30 rounded-lg p-4">
-                <h3 className="font-medium mb-3">{t("profile.title")}</h3>
-                <nav className="space-y-1">
-                  <Button 
-                    variant="ghost"
-                    size="sm"
-                    className="w-full justify-start"
-                    onClick={() => setActiveTab("saved")}
-                  >
-                    <Heart className="mr-2 h-4 w-4" />
-                    {t("profile.saved")}
-                  </Button>
-                  <Button 
-                    variant="ghost"
-                    size="sm"
-                    className="w-full justify-start"
-                    onClick={() => setActiveTab("grocery")}
-                  >
-                    <ShoppingCart className="mr-2 h-4 w-4" />
-                    {t("profile.grocery")}
-                  </Button>
-                  <Button 
-                    variant="ghost"
-                    size="sm"
-                    className="w-full justify-start"
-                  >
-                    <ClipboardList className="mr-2 h-4 w-4" />
-                    {t("nav.meal-planner")}
-                  </Button>
+    <div className="min-h-screen bg-background">
+      <Navbar />
 
-                  <Button 
-                    variant="ghost"
-                    size="sm"
-                    className="w-full justify-start text-destructive hover:text-destructive"
-                    onClick={signOut}
-                  >
-                    <LogOut className="mr-2 h-4 w-4" />
-                    {t("profile.logout")}
-                  </Button>
-                </nav>
-              </div>
+      <main className="content-grid pt-24 md:pt-28 pb-16">
+        <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
+          
+          {/* LEFT: User Profile Sidebar */}
+          <div className="lg:col-span-1 space-y-6">
+            <Card className="border-border shadow-sm">
+              <CardContent className="pt-6 text-center space-y-4">
+                <div className="h-20 w-20 mx-auto rounded-full bg-primary/10 border-2 border-primary/20 flex items-center justify-center text-primary font-bold text-2xl">
+                  {name ? name.charAt(0).toUpperCase() : <User className="h-8 w-8" />}
+                </div>
+
+                <div>
+                  <h2 className="text-xl font-bold">{name || "Chef"}</h2>
+                  <p className="text-xs text-muted-foreground">{user?.email}</p>
+                  <div className="inline-flex items-center gap-1.5 mt-2 px-2.5 py-1 rounded-full bg-secondary text-xs text-secondary-foreground font-medium">
+                    <Globe className="h-3 w-3" />
+                    <span>{COUNTRIES.find((c) => c.code === country)?.name || country}</span>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 pt-2 border-t text-left">
+                  <div className="p-2.5 rounded-lg bg-muted/40">
+                    <span className="text-xs text-muted-foreground block">Saved</span>
+                    <span className="text-lg font-bold text-primary">{savedRecipes.length}</span>
+                  </div>
+                  <div className="p-2.5 rounded-lg bg-muted/40">
+                    <span className="text-xs text-muted-foreground block">Cooked</span>
+                    <span className="text-lg font-bold text-emerald-600">{cookedRecipes.length}</span>
+                  </div>
+                </div>
+
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  className="w-full text-destructive hover:bg-destructive/10 hover:text-destructive border-destructive/20 gap-2"
+                  onClick={signOut}
+                >
+                  <LogOut className="h-4 w-4" />
+                  Sign Out
+                </Button>
+              </CardContent>
+            </Card>
+
+            {/* Quick Links */}
+            <div className="p-4 rounded-xl border bg-card space-y-1.5 text-sm">
+              <Link 
+                to="/meal-planner" 
+                className="flex items-center justify-between p-2.5 rounded-lg hover:bg-muted font-medium transition-colors"
+              >
+                <span className="flex items-center gap-2">
+                  <Calendar className="h-4 w-4 text-primary" />
+                  Meal Planner
+                </span>
+                <span className="text-xs text-muted-foreground">&rarr;</span>
+              </Link>
+              <Link 
+                to="/recipes" 
+                className="flex items-center justify-between p-2.5 rounded-lg hover:bg-muted font-medium transition-colors"
+              >
+                <span className="flex items-center gap-2">
+                  <ChefHat className="h-4 w-4 text-primary" />
+                  Recipe Discovery
+                </span>
+                <span className="text-xs text-muted-foreground">&rarr;</span>
+              </Link>
             </div>
           </div>
-          
-          <div className="flex-1">
-            <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-              <TabsList className="w-full grid grid-cols-2 mb-6">
-                <TabsTrigger value="saved" className="flex gap-2 items-center">
-                  <Heart className="h-4 w-4" />
-                  {t("profile.saved")}
+
+          {/* RIGHT: Tabs for Preferences, Saved Recipes, History */}
+          <div className="lg:col-span-3">
+            <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
+              <TabsList className="grid grid-cols-3 max-w-md w-full">
+                <TabsTrigger value="preferences" className="gap-2">
+                  <Sliders className="h-4 w-4" />
+                  Preferences
                 </TabsTrigger>
-                <TabsTrigger value="grocery" className="flex gap-2 items-center">
-                  <ShoppingCart className="h-4 w-4" />
-                  {t("profile.grocery")}
+                <TabsTrigger value="saved" className="gap-2">
+                  <Heart className="h-4 w-4" />
+                  Saved ({savedRecipes.length})
+                </TabsTrigger>
+                <TabsTrigger value="history" className="gap-2">
+                  <History className="h-4 w-4" />
+                  Cooked ({cookedRecipes.length})
                 </TabsTrigger>
               </TabsList>
-              
-              <TabsContent value="saved" className="animate-fade-in">
-                <div className="bg-card rounded-lg shadow-sm p-6">
-                  <h2 className="text-2xl font-semibold mb-6">{t("profile.saved")}</h2>
-                  
-                  {SAVED_RECIPES.length > 0 ? (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {SAVED_RECIPES.map((recipe) => (
-                        <div 
-                          key={recipe.id}
-                          className="flex gap-4 p-3 bg-background rounded-lg hover:shadow-md transition-default"
-                        >
-                          <img
-                            src={recipe.image}
-                            alt={recipe.title}
-                            className="h-20 w-20 object-cover rounded-md"
-                          />
-                          <div className="flex-1">
-                            <Link to={`/recipe/${recipe.id}`} className="hover:text-primary transition-colors">
-                              <h3 className="font-medium">{recipe.title}</h3>
+
+              {/* TAB 1: Preferences Editor */}
+              <TabsContent value="preferences" className="space-y-6 animate-fade-in">
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-xl">Cooking Profile & Taste Intelligence</CardTitle>
+                    <CardDescription>
+                      Adjust your diet, preferred cuisines, and allergens. Any changes immediately calibrate your personalized recommendations.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-6">
+                    {/* Basic details */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <label className="text-xs font-semibold text-foreground">Display Name</label>
+                        <Input value={name} onChange={(e) => setName(e.target.value)} />
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-xs font-semibold text-foreground">Country Context</label>
+                        <Select value={country} onValueChange={setCountry}>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select country" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {COUNTRIES.map((c) => (
+                              <SelectItem key={c.code} value={c.code}>{c.name}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+
+                    {/* Diet Selection */}
+                    <div className="space-y-2">
+                      <label className="text-xs font-semibold text-foreground">Dietary Restriction (Strict Constraint)</label>
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                        {[
+                          { id: "all", label: "No Restrictions" },
+                          { id: "vegetarian", label: "Vegetarian" },
+                          { id: "vegan", label: "Vegan" },
+                          { id: "eggetarian", label: "Eggetarian" },
+                          { id: "pescatarian", label: "Pescatarian" },
+                        ].map((d) => (
+                          <button
+                            key={d.id}
+                            type="button"
+                            onClick={() => setDiet(d.id as DietType)}
+                            className={`p-3 text-xs font-medium rounded-xl border text-center transition-all ${
+                              diet === d.id 
+                                ? "border-primary bg-primary/5 text-primary ring-2 ring-primary/20 font-semibold" 
+                                : "hover:bg-muted"
+                            }`}
+                          >
+                            {d.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Favorite Cuisines */}
+                    <div className="space-y-2">
+                      <label className="text-xs font-semibold text-foreground">Favorite Cuisines</label>
+                      <div className="flex flex-wrap gap-2">
+                        {ALL_CUISINES.map((c) => {
+                          const selected = favoriteCuisines.includes(c);
+                          return (
+                            <Badge
+                              key={c}
+                              variant={selected ? "default" : "outline"}
+                              className="cursor-pointer py-1.5 px-3 text-xs rounded-lg transition-all"
+                              onClick={() => handleToggleCuisine(c)}
+                            >
+                              {c}
+                            </Badge>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Allergies */}
+                    <div className="space-y-2">
+                      <label className="text-xs font-semibold text-destructive">Allergens (Zero-Tolerance Exclusion)</label>
+                      <div className="flex flex-wrap gap-2">
+                        {COMMON_ALLERGIES.map((a) => {
+                          const selected = allergies.includes(a);
+                          return (
+                            <Badge
+                              key={a}
+                              variant={selected ? "destructive" : "outline"}
+                              className="cursor-pointer py-1.5 px-3 text-xs rounded-lg transition-all"
+                              onClick={() => handleToggleAllergy(a)}
+                            >
+                              {a}
+                            </Badge>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Disliked Ingredients */}
+                    <div className="space-y-2">
+                      <label className="text-xs font-semibold text-foreground">Disliked Ingredients (Soft Ranking Penalty)</label>
+                      <div className="flex flex-wrap gap-2">
+                        {DISLIKED_OPTIONS.map((ing) => {
+                          const selected = dislikedIngredients.includes(ing);
+                          return (
+                            <Badge
+                              key={ing}
+                              variant={selected ? "secondary" : "outline"}
+                              className={`cursor-pointer py-1.5 px-3 text-xs rounded-lg transition-all ${
+                                selected ? "bg-stone-300 dark:bg-stone-700" : ""
+                              }`}
+                              onClick={() => handleToggleDislike(ing)}
+                            >
+                              {ing}
+                            </Badge>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Time, Skill, Spice */}
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-2">
+                      <div className="space-y-2">
+                        <label className="text-xs font-semibold text-foreground">Preferred Cook Time</label>
+                        <Select value={cookingTime} onValueChange={(v) => setCookingTime(v as CookingTimePreference)}>
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="<15">&lt; 15 mins</SelectItem>
+                            <SelectItem value="15-30">15–30 mins</SelectItem>
+                            <SelectItem value="30-60">30–60 mins</SelectItem>
+                            <SelectItem value="60+">60+ mins</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div className="space-y-2">
+                        <label className="text-xs font-semibold text-foreground">Cooking Skill</label>
+                        <Select value={cookingSkill} onValueChange={(v) => setCookingSkill(v as CookingSkill)}>
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="beginner">Beginner</SelectItem>
+                            <SelectItem value="intermediate">Intermediate</SelectItem>
+                            <SelectItem value="advanced">Advanced</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div className="space-y-2">
+                        <label className="text-xs font-semibold text-foreground">Spice Preference</label>
+                        <Select value={spicePreference} onValueChange={(v) => setSpicePreference(v as SpicePreference)}>
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="mild">Mild</SelectItem>
+                            <SelectItem value="medium">Medium</SelectItem>
+                            <SelectItem value="spicy">Spicy</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+
+                    <div className="pt-4 border-t flex justify-end">
+                      <Button onClick={handleSavePreferences} className="gap-2 rounded-xl">
+                        <Save className="h-4 w-4" />
+                        Save Preferences
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              </TabsContent>
+
+              {/* TAB 2: Saved Recipes */}
+              <TabsContent value="saved" className="space-y-4 animate-fade-in">
+                {isLoadingData ? (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    {Array(4).fill(0).map((_, i) => (
+                      <div key={i} className="h-32 bg-muted rounded-xl animate-pulse" />
+                    ))}
+                  </div>
+                ) : savedRecipes.length > 0 ? (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    {savedRecipes.map((recipe) => (
+                      <div 
+                        key={recipe.id}
+                        className="flex gap-4 p-3.5 bg-card border rounded-xl hover:shadow-md transition-all group"
+                      >
+                        <img
+                          src={recipe.image}
+                          alt={recipe.title}
+                          className="h-24 w-24 object-cover rounded-lg shrink-0"
+                        />
+                        <div className="flex-1 min-w-0 flex flex-col justify-between">
+                          <div>
+                            <Link 
+                              to={`/recipe/${recipe.id}`} 
+                              className="font-semibold text-foreground hover:text-primary transition-colors line-clamp-1"
+                            >
+                              {recipe.title}
                             </Link>
-                            <div className="flex flex-wrap gap-1 mt-2">
-                              {recipe.tags.map((tag, idx) => (
-                                <Badge key={idx} variant="outline" className="text-xs">
-                                  {tag}
-                                </Badge>
-                              ))}
+                            <div className="flex items-center gap-3 text-xs text-muted-foreground mt-1">
+                              <span className="flex items-center gap-1">
+                                <Clock className="h-3.5 w-3.5" />
+                                {recipe.readyInMinutes}m
+                              </span>
+                              <span>&bull;</span>
+                              <span>{recipe.cuisine}</span>
                             </div>
                           </div>
+
+                          <div className="flex items-center justify-between mt-2">
+                            <Badge variant="secondary" className="text-[10px] capitalize">
+                              {recipe.diet || "All diets"}
+                            </Badge>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                              onClick={() => handleUnsaveRecipe(recipe.id)}
+                              aria-label="Remove from saved"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
                         </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="text-center py-12 bg-muted/30 rounded-lg">
-                      <Heart className="h-12 w-12 mx-auto text-muted-foreground mb-3" />
-                      <h3 className="text-xl font-medium mb-2">{t("profile.empty.saved")}</h3>
-                      <p className="text-muted-foreground mb-4">
-                        Start exploring and saving recipes you love
-                      </p>
-                      <Button asChild>
-                        <Link to="/recipes">{t("nav.recipes")}</Link>
-                      </Button>
-                    </div>
-                  )}
-                </div>
-              </TabsContent>
-              
-              <TabsContent value="grocery" className="animate-fade-in">
-                <div className="bg-card rounded-lg shadow-sm p-6">
-                  <div className="flex items-center justify-between mb-6">
-                    <h2 className="text-2xl font-semibold">{t("profile.grocery")}</h2>
-                    <div className="flex gap-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={clearCheckedItems}
-                        className="flex items-center gap-1"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                        Clear Checked
-                      </Button>
-                    </div>
+                      </div>
+                    ))}
                   </div>
-                  
-                  <div className="flex gap-2 mb-6">
-                    <div className="flex-1">
-                      <input
-                        type="text"
-                        value={newItemName}
-                        onChange={(e) => setNewItemName(e.target.value)}
-                        placeholder="Add item..."
-                        className="w-full px-3 py-2 rounded-md border border-input bg-background"
-                      />
-                    </div>
-                    <div className="w-24">
-                      <input
-                        type="text"
-                        value={newItemQuantity}
-                        onChange={(e) => setNewItemQuantity(e.target.value)}
-                        placeholder="Qty"
-                        className="w-full px-3 py-2 rounded-md border border-input bg-background"
-                      />
-                    </div>
-                    <div className="w-32">
-                      <select
-                        value={newItemCategory}
-                        onChange={(e) => setNewItemCategory(e.target.value)}
-                        className="w-full px-3 py-2 rounded-md border border-input bg-background"
-                      >
-                        <option value="Produce">Produce</option>
-                        <option value="Dairy">Dairy</option>
-                        <option value="Meat">Meat</option>
-                        <option value="Seafood">Seafood</option>
-                        <option value="Pantry">Pantry</option>
-                        <option value="Frozen">Frozen</option>
-                        <option value="Bakery">Bakery</option>
-                        <option value="Other">Other</option>
-                      </select>
-                    </div>
-                    <Button onClick={handleAddItem} size="icon">
-                      <Plus className="h-4 w-4" />
+                ) : (
+                  <div className="text-center py-16 bg-muted/20 border border-dashed rounded-2xl">
+                    <Heart className="h-12 w-12 mx-auto text-muted-foreground mb-3" />
+                    <h3 className="text-lg font-semibold mb-1">Your recipe collection is empty</h3>
+                    <p className="text-sm text-muted-foreground max-w-sm mx-auto mb-4">
+                      Explore recipes and save the ones you want to cook later.
+                    </p>
+                    <Button asChild>
+                      <Link to="/recipes">Discover Recipes</Link>
                     </Button>
                   </div>
-                  
-                  {Object.keys(groupedItems).length > 0 ? (
-                    <ScrollArea className="h-[400px] pr-4">
-                      {Object.entries(groupedItems).map(([category, items]) => (
-                        <div key={category} className="mb-6">
-                          <h3 className="font-medium text-lg mb-2 flex items-center">
-                            <span className="h-2 w-2 rounded-full bg-primary mr-2"></span>
-                            {category}
-                          </h3>
-                          <ul className="space-y-2">
-                            {items.map((item) => (
-                              <li 
-                                key={item.id} 
-                                className={`flex items-center justify-between p-3 rounded-md ${
-                                  item.checked ? "bg-muted/50 text-muted-foreground" : "bg-background"
-                                }`}
-                              >
-                                <div className="flex items-center gap-3 flex-1">
-                                  <button
-                                    onClick={() => handleToggleCheck(item.id)}
-                                    className={`h-5 w-5 rounded-full flex items-center justify-center border ${
-                                      item.checked 
-                                        ? "bg-primary border-primary text-primary-foreground" 
-                                        : "border-input"
-                                    }`}
-                                  >
-                                    {item.checked && <Check className="h-3 w-3" />}
-                                  </button>
-                                  <span className={item.checked ? "line-through" : ""}>
-                                    {item.name}
-                                  </span>
-                                </div>
-                                <div className="flex items-center gap-4">
-                                  <span className="text-sm text-muted-foreground">
-                                    {item.quantity}
-                                  </span>
-                                  <button
-                                    onClick={() => handleDeleteItem(item.id)}
-                                    className="text-muted-foreground hover:text-destructive transition-colors"
-                                  >
-                                    <Trash2 className="h-4 w-4" />
-                                  </button>
-                                </div>
-                              </li>
-                            ))}
-                          </ul>
-                          <Separator className="mt-4" />
+                )}
+              </TabsContent>
+
+              {/* TAB 3: Cooking History */}
+              <TabsContent value="history" className="space-y-4 animate-fade-in">
+                {cookedRecipes.length > 0 ? (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    {cookedRecipes.map((recipe) => (
+                      <div 
+                        key={recipe.id}
+                        className="flex gap-4 p-3.5 bg-card border rounded-xl hover:shadow-sm transition-all"
+                      >
+                        <img
+                          src={recipe.image}
+                          alt={recipe.title}
+                          className="h-20 w-20 object-cover rounded-lg shrink-0"
+                        />
+                        <div className="flex-1 min-w-0">
+                          <span className="text-[10px] font-semibold text-emerald-600 bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 rounded-full inline-block mb-1">
+                            Cooked
+                          </span>
+                          <Link 
+                            to={`/recipe/${recipe.id}`} 
+                            className="font-medium text-sm text-foreground hover:text-primary transition-colors block line-clamp-1"
+                          >
+                            {recipe.title}
+                          </Link>
+                          <div className="text-xs text-muted-foreground mt-1">
+                            {recipe.cuisine} &bull; {recipe.readyInMinutes} mins
+                          </div>
                         </div>
-                      ))}
-                    </ScrollArea>
-                  ) : (
-                    <div className="text-center py-12 bg-muted/30 rounded-lg">
-                      <ShoppingCart className="h-12 w-12 mx-auto text-muted-foreground mb-3" />
-                      <h3 className="text-xl font-medium mb-2">{t("profile.empty.grocery")}</h3>
-                      <p className="text-muted-foreground mb-4">
-                        Add items to your grocery list
-                      </p>
-                    </div>
-                  )}
-                </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-16 bg-muted/20 border border-dashed rounded-2xl">
+                    <ChefHat className="h-12 w-12 mx-auto text-muted-foreground mb-3" />
+                    <h3 className="text-lg font-semibold mb-1">No cooked recipes recorded yet</h3>
+                    <p className="text-sm text-muted-foreground max-w-sm mx-auto mb-4">
+                      When you prepare a recipe, click "Cook this" on the recipe detail page to help suvAI learn your taste.
+                    </p>
+                    <Button asChild variant="outline">
+                      <Link to="/recipes">Find something to cook</Link>
+                    </Button>
+                  </div>
+                )}
               </TabsContent>
             </Tabs>
           </div>
         </div>
-      </div>
+      </main>
     </div>
   );
 };
