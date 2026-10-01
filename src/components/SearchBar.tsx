@@ -1,40 +1,52 @@
-
 import { useState } from "react";
-import { Search } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { Search, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 
 const SearchBar = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [isFocused, setIsFocused] = useState(false);
+  const navigate = useNavigate();
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
-    console.log("Searching for:", searchQuery);
-    // In a real app, this would trigger a search
+    const query = searchQuery.trim();
+    if (!query) return;
+
+    // Navigate to recipes page with search query parameter
+    navigate(`/recipes?q=${encodeURIComponent(query)}`);
+    setIsFocused(false);
   };
 
   return (
-    <div className="flex items-center gap-2">
-      <form 
-        onSubmit={handleSearch} 
-        className={`relative rounded-full overflow-hidden transition-all duration-300 ${
-          isFocused ? "ring-2 ring-primary/20" : ""
-        }`}
-      >
-        <div className="flex items-center">
-          <Search className="absolute left-3 h-4 w-4 text-muted-foreground" />
-          <Input
-            type="search"
-            placeholder="Search recipes..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            onFocus={() => setIsFocused(true)}
-            onBlur={() => setIsFocused(false)}
-            className="pl-9 pr-4 py-2 w-full md:w-[200px] lg:w-[300px] h-9 bg-secondary/50 border-0 focus-visible:ring-0 rounded-full transition-all duration-300"
-          />
-        </div>
-      </form>
-    </div>
+    <form 
+      onSubmit={handleSearch} 
+      className={`relative rounded-full transition-all duration-300 w-full sm:w-[220px] lg:w-[280px] ${
+        isFocused ? "ring-2 ring-primary/20 scale-[1.01]" : ""
+      }`}
+    >
+      <div className="relative flex items-center">
+        <Search className="absolute left-3.5 h-4 w-4 text-muted-foreground pointer-events-none" />
+        <Input
+          type="search"
+          placeholder="Search recipes, ingredients..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          onFocus={() => setIsFocused(true)}
+          onBlur={() => setIsFocused(false)}
+          className="pl-9 pr-8 h-9 text-xs bg-muted/60 hover:bg-muted/80 border-0 focus-visible:ring-0 rounded-full transition-all"
+        />
+        {searchQuery && (
+          <button
+            type="button"
+            onClick={() => setSearchQuery("")}
+            className="absolute right-3 text-muted-foreground hover:text-foreground"
+          >
+            <X className="h-3 w-3" />
+          </button>
+        )}
+      </div>
+    </form>
   );
 };
 

@@ -1,4 +1,3 @@
-
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -12,37 +11,50 @@ import RecipePage from "./pages/RecipePage";
 import RecipeCategoryPage from "./pages/RecipeCategoryPage";
 import ProfilePage from "./pages/ProfilePage";
 import MealPlannerPage from "./pages/MealPlannerPage";
+import GroceryPage from "./pages/GroceryPage";
+import ChatbotPage from "./pages/ChatbotPage";
+import OnboardingPage from "./pages/OnboardingPage";
 import AuthPage from "./pages/AuthPage";
 import NotFound from "./pages/NotFound";
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 5 * 60 * 1000,
+      refetchOnWindowFocus: false,
+    },
+  },
+});
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
       <Toaster />
-      <Sonner />
+      <Sonner position="top-right" richColors />
       <BrowserRouter>
         <LanguageProvider>
           <AuthProvider>
             <Routes>
-              {/* Public routes */}
+              {/* Public & Guest accessible routes */}
+              <Route path="/" element={<Index />} />
+              <Route path="/recipes" element={<RecipeCategoryPage />} />
+              <Route path="/recipe/:id" element={<RecipePage />} />
+              <Route path="/meal-planner" element={<MealPlannerPage />} />
+              <Route path="/grocery" element={<GroceryPage />} />
+              <Route path="/assistant" element={<ChatbotPage />} />
+
+              {/* Authentication entry */}
               <Route element={<ProtectedRoute requireAuth={false} />}>
                 <Route path="/auth" element={<AuthPage />} />
               </Route>
-              
-              {/* Routes accessible to both authenticated and unauthenticated users */}
-              <Route path="/" element={<Index />} />
-              <Route path="/recipe/:id" element={<RecipePage />} />
-              <Route path="/recipes" element={<RecipeCategoryPage />} />
-              <Route path="/meal-planner" element={<MealPlannerPage />} />
-              
-              {/* Protected routes (require authentication) */}
+
+              {/* Protected user routes */}
               <Route element={<ProtectedRoute requireAuth={true} />}>
+                <Route path="/onboarding" element={<OnboardingPage />} />
                 <Route path="/profile" element={<ProfilePage />} />
               </Route>
-              
-              {/* 404 route */}
+
+              {/* 404 fallback */}
               <Route path="*" element={<NotFound />} />
             </Routes>
           </AuthProvider>
