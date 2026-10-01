@@ -1,28 +1,29 @@
-
 import { useAuth } from "@/contexts/AuthContext";
-import { Navigate, Outlet } from "react-router-dom";
+import { Navigate, Outlet, useLocation } from "react-router-dom";
 import { Loader2 } from "lucide-react";
 
 interface ProtectedRouteProps {
   requireAuth?: boolean;
 }
 
-// This component handles route protection
-// If requireAuth is true, it redirects to /auth if user is not authenticated
-// If requireAuth is false, it redirects to / if user is authenticated
 const ProtectedRoute = ({ requireAuth = true }: ProtectedRouteProps) => {
   const { user, isLoading } = useAuth();
+  const location = useLocation();
   
   if (isLoading) {
     return (
-      <div className="flex h-screen items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      <div className="flex h-screen items-center justify-center bg-background">
+        <div className="flex flex-col items-center gap-3">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          <p className="text-sm text-muted-foreground font-medium">Checking your kitchen access...</p>
+        </div>
       </div>
     );
   }
   
   if (requireAuth && !user) {
-    return <Navigate to="/auth" replace />;
+    const returnUrl = encodeURIComponent(location.pathname + location.search);
+    return <Navigate to={`/auth?redirect=${returnUrl}`} replace />;
   }
   
   if (!requireAuth && user) {
