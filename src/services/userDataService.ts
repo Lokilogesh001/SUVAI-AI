@@ -30,9 +30,8 @@ export const userDataService = {
       .eq("user_id", userId);
 
     if (error) {
-      console.warn("Error fetching saved recipes from Supabase:", error.message);
-      const stored = localStorage.getItem(`${LOCAL_SAVED_KEY}_${userId}`);
-      return stored ? JSON.parse(stored) : [];
+      console.error("Supabase error fetching saved recipes:", error.message);
+      throw new Error(`Failed to fetch saved recipes from Supabase: ${error.message}`);
     }
 
     return (data || []).map((row) => row.recipe_id);
@@ -56,8 +55,8 @@ export const userDataService = {
       .upsert({ user_id: userId, recipe_id: recipeId });
 
     if (error) {
-      console.warn("Error saving recipe to Supabase:", error.message);
-      return false;
+      console.error("Supabase error saving recipe:", error.message);
+      throw new Error(`Database error saving recipe: ${error.message}`);
     }
 
     return true;
@@ -80,8 +79,8 @@ export const userDataService = {
       .eq("recipe_id", recipeId);
 
     if (error) {
-      console.warn("Error unsaving recipe in Supabase:", error.message);
-      return false;
+      console.error("Supabase error unsaving recipe:", error.message);
+      throw new Error(`Database error unsaving recipe: ${error.message}`);
     }
 
     return true;
@@ -99,23 +98,23 @@ export const userDataService = {
       created_at: new Date().toISOString(),
     };
 
-    // Keep in local cache for immediate recommendation scoring
-    const existing = this.getLocalInteractions(userId);
-    const updated = [item, ...existing.slice(0, 49)];
-    localStorage.setItem(`${LOCAL_INTERACTIONS_KEY}_${userId}`, JSON.stringify(updated));
+    if (!isSupabaseConfigured) {
+      const existing = this.getLocalInteractions(userId);
+      const updated = [item, ...existing.slice(0, 49)];
+      localStorage.setItem(`${LOCAL_INTERACTIONS_KEY}_${userId}`, JSON.stringify(updated));
+      return;
+    }
 
-    if (isSupabaseConfigured) {
-      const { error } = await supabase
-        .from("recipe_interactions")
-        .insert({
-          user_id: userId,
-          recipe_id: recipeId,
-          interaction_type: type,
-        });
+    const { error } = await supabase
+      .from("recipe_interactions")
+      .insert({
+        user_id: userId,
+        recipe_id: recipeId,
+        interaction_type: type,
+      });
 
-      if (error) {
-        console.warn("Error recording interaction in Supabase:", error.message);
-      }
+    if (error) {
+      console.warn("Supabase interaction tracking failed:", error.message);
     }
   },
 
@@ -137,8 +136,8 @@ export const userDataService = {
       .limit(50);
 
     if (error) {
-      console.warn("Error fetching interactions from Supabase:", error.message);
-      return this.getLocalInteractions(userId);
+      console.error("Supabase error fetching interactions:", error.message);
+      throw new Error(`Failed to load interactions from Supabase: ${error.message}`);
     }
 
     return data || [];
@@ -160,9 +159,8 @@ export const userDataService = {
       .order("date", { ascending: true });
 
     if (error) {
-      console.warn("Error fetching meal plans from Supabase:", error.message);
-      const stored = localStorage.getItem(`${LOCAL_MEALPLANS_KEY}_${userId}`);
-      return stored ? JSON.parse(stored) : [];
+      console.error("Supabase error fetching meal plans:", error.message);
+      throw new Error(`Failed to load meal plans from Supabase: ${error.message}`);
     }
 
     return data || [];
@@ -208,8 +206,8 @@ export const userDataService = {
       .single();
 
     if (error) {
-      console.warn("Error saving meal plan to Supabase:", error.message);
-      return newPlan;
+      console.error("Supabase error adding meal plan:", error.message);
+      throw new Error(`Failed to save meal plan to Supabase: ${error.message}`);
     }
 
     return data;
@@ -230,8 +228,8 @@ export const userDataService = {
       .eq("id", planId);
 
     if (error) {
-      console.warn("Error deleting meal plan in Supabase:", error.message);
-      return false;
+      console.error("Supabase error deleting meal plan:", error.message);
+      throw new Error(`Failed to delete meal plan from Supabase: ${error.message}`);
     }
 
     return true;
@@ -253,9 +251,8 @@ export const userDataService = {
       .order("created_at", { ascending: false });
 
     if (error) {
-      console.warn("Error fetching grocery items from Supabase:", error.message);
-      const stored = localStorage.getItem(`${LOCAL_GROCERY_KEY}_${userId}`);
-      return stored ? JSON.parse(stored) : [];
+      console.error("Supabase error fetching grocery items:", error.message);
+      throw new Error(`Failed to load grocery items from Supabase: ${error.message}`);
     }
 
     return data || [];
@@ -314,8 +311,8 @@ export const userDataService = {
       .single();
 
     if (error) {
-      console.warn("Error adding grocery item in Supabase:", error.message);
-      return newItem;
+      console.error("Supabase error adding grocery item:", error.message);
+      throw new Error(`Failed to save grocery item to Supabase: ${error.message}`);
     }
 
     return data;
@@ -329,11 +326,16 @@ export const userDataService = {
       return;
     }
 
-    await supabase
+    const { error } = await supabase
       .from("grocery_items")
       .update({ checked, updated_at: new Date().toISOString() })
       .eq("user_id", userId)
       .eq("id", itemId);
+
+    if (error) {
+      console.error("Supabase error updating grocery item:", error.message);
+      throw new Error(`Failed to update grocery item in Supabase: ${error.message}`);
+    }
   },
 
   async deleteGroceryItem(userId: string, itemId: string): Promise<void> {
@@ -344,11 +346,16 @@ export const userDataService = {
       return;
     }
 
-    await supabase
+    const { error } = await supabase
       .from("grocery_items")
       .delete()
       .eq("user_id", userId)
       .eq("id", itemId);
+
+    if (error) {
+      console.error("Supabase error deleting grocery item:", error.message);
+      throw new Error(`Failed to delete grocery item in Supabase: ${error.message}`);
+    }
   },
 
   async clearCheckedGroceryItems(userId: string): Promise<void> {
@@ -359,10 +366,15 @@ export const userDataService = {
       return;
     }
 
-    await supabase
+    const { error } = await supabase
       .from("grocery_items")
       .delete()
       .eq("user_id", userId)
       .eq("checked", true);
+
+    if (error) {
+      console.error("Supabase error clearing checked items:", error.message);
+      throw new Error(`Failed to clear checked grocery items in Supabase: ${error.message}`);
+    }
   }
 };

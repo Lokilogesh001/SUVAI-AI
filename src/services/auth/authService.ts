@@ -215,38 +215,42 @@ export const authService = {
   },
 
   async saveUserPreferences(preferences: UserPreferences): Promise<void> {
-    localStorage.setItem(LOCAL_PREFS_KEY, JSON.stringify(preferences));
+    if (!isSupabaseConfigured) {
+      localStorage.setItem(LOCAL_PREFS_KEY, JSON.stringify(preferences));
+      return;
+    }
 
-    if (isSupabaseConfigured) {
-      const { error } = await supabase
-        .from("user_preferences")
-        .upsert({
-          ...preferences,
-          updated_at: new Date().toISOString(),
-        });
+    const { error } = await supabase
+      .from("user_preferences")
+      .upsert({
+        ...preferences,
+        updated_at: new Date().toISOString(),
+      });
 
-      if (error) {
-        console.warn("Error saving preferences to Supabase:", error.message);
-      }
+    if (error) {
+      console.error("Error saving preferences to Supabase:", error.message);
+      throw new Error(`Failed to save preferences to Supabase: ${error.message}`);
     }
   },
 
   async updateUserProfile(userId: string, updates: Partial<UserProfile>): Promise<void> {
-    if (isSupabaseConfigured) {
-      const { error } = await supabase
-        .from("profiles")
-        .update({ ...updates, updated_at: new Date().toISOString() })
-        .eq("id", userId);
-
-      if (error) {
-        console.warn("Error updating profile in Supabase:", error.message);
+    if (!isSupabaseConfigured) {
+      const existing = localStorage.getItem(LOCAL_PROFILE_KEY);
+      if (existing) {
+        const parsed = JSON.parse(existing);
+        localStorage.setItem(LOCAL_PROFILE_KEY, JSON.stringify({ ...parsed, ...updates }));
       }
+      return;
     }
 
-    const existing = localStorage.getItem(LOCAL_PROFILE_KEY);
-    if (existing) {
-      const parsed = JSON.parse(existing);
-      localStorage.setItem(LOCAL_PROFILE_KEY, JSON.stringify({ ...parsed, ...updates }));
+    const { error } = await supabase
+      .from("profiles")
+      .update({ ...updates, updated_at: new Date().toISOString() })
+      .eq("id", userId);
+
+    if (error) {
+      console.error("Error updating profile in Supabase:", error.message);
+      throw new Error(`Failed to update profile in Supabase: ${error.message}`);
     }
   }
 };

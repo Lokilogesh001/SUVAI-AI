@@ -17,6 +17,8 @@ import OnboardingPage from "./pages/OnboardingPage";
 import AuthPage from "./pages/AuthPage";
 import NotFound from "./pages/NotFound";
 
+import DemoModeBanner from "./components/DemoModeBanner";
+
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
@@ -29,6 +31,7 @@ const queryClient = new QueryClient({
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
+      <DemoModeBanner />
       <Toaster />
       <Sonner position="top-right" richColors />
       <BrowserRouter>
